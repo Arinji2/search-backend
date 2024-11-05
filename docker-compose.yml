@@ -5,6 +5,8 @@ services:
     restart: always
     volumes:
       - ./.env:/app/.env
+      - ./lemmatization.txt:/app/lemmatization.txt
+      - ./stopwords.txt:/app/stopwords.txt
     ports:
       - "57:8080"
     healthcheck:
