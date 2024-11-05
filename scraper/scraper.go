@@ -1,7 +1,6 @@
 package scraper
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -29,9 +28,9 @@ func NewScraper(baseURL string) *Scraper {
 	return &Scraper{BaseURL: baseURL}
 }
 
-func (s *Scraper) Start() error {
+func (s *Scraper) Start() (string, int, error) {
 	if !checkRobots(s.BaseURL) {
-		return fmt.Errorf("robots.txt disallows scraping of %s", s.BaseURL)
+		return "", 0, fmt.Errorf("robots.txt disallows scraping of %s", s.BaseURL)
 	}
 
 	crawlerClient := &http.Client{
@@ -40,17 +39,17 @@ func (s *Scraper) Start() error {
 
 	doc, err := fetchAndParse(crawlerClient, s.BaseURL)
 	if err != nil {
-		return fmt.Errorf("error fetching page: %w", err)
+		return "", 0, fmt.Errorf("error fetching page: %w", err)
 	}
 
 	stopWords, err := loadStopWords()
 	if err != nil {
-		return fmt.Errorf("error loading stop words: %w", err)
+		return "", 0, fmt.Errorf("error loading stop words: %w", err)
 	}
 
 	lemmatizer, err := loadLemmatizer()
 	if err != nil {
-		return fmt.Errorf("error loading lemmatizer: %w", err)
+		return "", 0, fmt.Errorf("error loading lemmatizer: %w", err)
 	}
 
 	content, firstH1, firstP := extractContent(doc)
@@ -81,14 +80,12 @@ func (s *Scraper) Start() error {
 	var indexingWg sync.WaitGroup
 	keywordsIDChan := make(chan keyword, len(finalWords))
 	pageIDChan := make(chan string, 1)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 
 	for _, words := range finalWords {
 		indexingWg.Add(1)
 		go func(word string, count int) {
 			defer indexingWg.Done()
-			id, err := keywordIndexer(ctx, word)
+			id, err := keywordIndexer(word)
 			if err != nil {
 				fmt.Printf("Error indexing keyword %s: %v\n", word, err)
 				return
@@ -102,7 +99,7 @@ func (s *Scraper) Start() error {
 	indexingWg.Add(1)
 	go func() {
 		defer indexingWg.Done()
-		id, err := pageIndexer(ctx, pageData)
+		id, err := pageIndexer(pageData)
 		if err != nil {
 			fmt.Printf("Error indexing page %s: %v\n", pageData.URL, err)
 			return
@@ -114,7 +111,7 @@ func (s *Scraper) Start() error {
 
 	go func() {
 
-		if err := addLinksToIndexList(ctx, links); err != nil {
+		if err := addLinksToIndexList(links); err != nil {
 			fmt.Printf("Error adding links to index: %v\n", err)
 		}
 	}()
@@ -136,12 +133,12 @@ func (s *Scraper) Start() error {
 	close(pageIDChan)
 
 	if pageID != "" && len(keywords) > 0 {
-		if err := linkPageKeywords(ctx, keywords, pageID); err != nil {
-			return fmt.Errorf("error linking page keywords: %w", err)
+		if err := linkPageKeywords(keywords, pageID); err != nil {
+			return "", 0, fmt.Errorf("error linking page keywords: %w", err)
 		}
 	}
 
-	return nil
+	return title, len(links), nil
 }
 
 func checkRobots(siteURL string) bool {
@@ -176,7 +173,7 @@ func checkRobots(siteURL string) bool {
 	return string(rules) != "User-agent: *\nDisallow: /"
 }
 
-func keywordIndexer(ctx context.Context, keyword string) (string, error) {
+func keywordIndexer(keyword string) (string, error) {
 	keywordExists, id, err := sql.KeywordExists(keyword)
 	if err != nil {
 		return "", fmt.Errorf("error checking keyword existence %s: %w", keyword, err)
@@ -194,15 +191,11 @@ func keywordIndexer(ctx context.Context, keyword string) (string, error) {
 			return "", fmt.Errorf("error calculating IDF (existing): %w", err)
 		}
 
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		default:
-			if err := sql.UpdateKeyword(id, existingKeywordData); err != nil {
-				return "", fmt.Errorf("error updating keyword: %w", err)
-			}
-			return id, nil
+		if err := sql.UpdateKeyword(id, existingKeywordData); err != nil {
+			return "", fmt.Errorf("error updating keyword: %w", err)
 		}
+		return id, nil
+
 	}
 
 	idf, err := utils.CalculateIDF(1)
@@ -216,53 +209,42 @@ func keywordIndexer(ctx context.Context, keyword string) (string, error) {
 		IDF:      idf,
 	}
 
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	default:
-		id, err := sql.CreateKeyword(keywordData)
-		if err != nil {
-			return "", fmt.Errorf("error creating keyword %s: %w", keyword, err)
-		}
-		return id, nil
+	id, err = sql.CreateKeyword(keywordData)
+	if err != nil {
+		return "", fmt.Errorf("error creating keyword %s: %w", keyword, err)
 	}
+	return id, nil
+
 }
 
-func pageIndexer(ctx context.Context, pageData types.SQLPage) (string, error) {
+func pageIndexer(pageData types.SQLPage) (string, error) {
 	pageExists, existingID, err := sql.PageExists(pageData.URL)
 	if err != nil {
 		return "", fmt.Errorf("error checking page existence %s: %w", pageData.URL, err)
 	}
 
 	if pageExists {
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		default:
-			if err := sql.DeletePageIndex(pageData.URL); err != nil {
-				return "", fmt.Errorf("error deleting page index: %w", err)
-			}
-			return existingID, nil
-		}
-	}
-
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	default:
-		id, err := sql.CreatePage(pageData)
-		if err != nil {
-			return "", fmt.Errorf("error creating page: %w", err)
-		}
 
 		if err := sql.DeletePageIndex(pageData.URL); err != nil {
 			return "", fmt.Errorf("error deleting page index: %w", err)
 		}
-		return id, nil
+		return existingID, nil
+
 	}
+
+	id, err := sql.CreatePage(pageData)
+	if err != nil {
+		return "", fmt.Errorf("error creating page: %w", err)
+	}
+
+	if err := sql.DeletePageIndex(pageData.URL); err != nil {
+		return "", fmt.Errorf("error deleting page index: %w", err)
+	}
+	return id, nil
+
 }
 
-func addLinksToIndexList(ctx context.Context, links []string) error {
+func addLinksToIndexList(links []string) error {
 
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10)
@@ -277,13 +259,8 @@ func addLinksToIndexList(ctx context.Context, links []string) error {
 		go func(link string) {
 			defer wg.Done()
 
-			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-			case <-ctx.Done():
-				errorChan <- ctx.Err()
-				return
-			}
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
 
 			if err := sql.AddIndexList(link); err != nil {
 				errorChan <- fmt.Errorf("error adding link %s to index: %w", link, err)
@@ -307,7 +284,7 @@ func addLinksToIndexList(ctx context.Context, links []string) error {
 	return nil
 }
 
-func linkPageKeywords(ctx context.Context, keywords []keyword, pageID string) error {
+func linkPageKeywords(keywords []keyword, pageID string) error {
 	var wg sync.WaitGroup
 	errorChan := make(chan error, len(keywords))
 	semaphore := make(chan struct{}, 10)
@@ -317,13 +294,8 @@ func linkPageKeywords(ctx context.Context, keywords []keyword, pageID string) er
 		go func(id string, freq int) {
 			defer wg.Done()
 
-			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
-			case <-ctx.Done():
-				errorChan <- ctx.Err()
-				return
-			}
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
 
 			if err := sql.LinkPageKeyword(id, pageID, freq); err != nil {
 				errorChan <- fmt.Errorf("error linking page %s to keyword %s: %w", pageID, id, err)

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Arinji2/search-backend/types"
+	"github.com/Arinji2/search-backend/utils"
 	"github.com/gertd/go-pluralize"
 	"golang.org/x/net/html"
 )
@@ -94,6 +95,10 @@ func processWords(sentences []string, stopWords map[string]struct{}) (map[string
 		for _, word := range fields {
 
 			if _, isStopWord := stopWords[word]; isStopWord {
+				continue
+			}
+
+			if !utils.IsEnglishWord(word) {
 				continue
 			}
 

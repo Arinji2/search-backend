@@ -1,6 +1,8 @@
 package sql
 
-import "database/sql"
+import (
+	"database/sql"
+)
 
 func DeletePageIndex(url string) error {
 	db := getDB()
@@ -52,4 +54,28 @@ func AddIndexList(url string) error {
 	}
 
 	return nil
+}
+
+func GetIndexList(count int) ([]string, error) {
+	db := getDB()
+
+	query := "SELECT url FROM index_list LIMIT ?"
+
+	rows, err := db.Query(query, count)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var urls []string
+	for rows.Next() {
+		var url string
+		err := rows.Scan(&url)
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, url)
+	}
+
+	return urls, nil
 }

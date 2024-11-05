@@ -5,8 +5,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Arinji2/search-backend/utils"
 	"golang.org/x/net/html"
 )
+
+var blockedTerms = []string{
+	"facebook", "twitter", "dashboard",
+}
 
 func extractLinks(n *html.Node) []string {
 	var content []string
@@ -18,13 +23,22 @@ func extractLinks(n *html.Node) []string {
 			case "a":
 				link := extractLink(n)
 				extensionRegex := `\.(png|jpe?g|gif|bmp|svg|webp|tiff?|pdf|docx?|xlsx?|pptx?|mp4|avi|mov|mkv|mp3|wav|flac|zip|rar|tar|gz|7z)$`
+				blockedPattern := regexp.MustCompile(`(?i)` + strings.Join(blockedTerms, "|"))
 				isInvalidLink := regexp.MustCompile(extensionRegex).MatchString(link)
 				if isInvalidLink {
+					return
+				}
+				if blockedPattern.MatchString(link) {
 					return
 				}
 				if slices.Contains(content, link) {
 					return
 				}
+				if !utils.IsEnglishURL(link) {
+					return
+				}
+
+				//make sure no blocked links exist
 				content = append(content, link)
 			}
 		}
