@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
+	"github.com/Arinji2/search-backend/scraper"
+	"github.com/Arinji2/search-backend/sql"
 	"github.com/joho/godotenv"
 )
 
@@ -21,7 +24,25 @@ func main() {
 		fmt.Println("Using Development Environment")
 	}
 
-	//scraper.StartScrapers()
-	//sql.UpdateIDFScores()
+	startCronjobs()
+}
+
+func startCronjobs() {
+	fmt.Println("Starting Cronjobs")
+	scraperTicker := time.NewTicker(time.Hour * 1)
+	go func() {
+		for range scraperTicker.C {
+			fmt.Println("Starting Scraper")
+			scraper.StartScrapers()
+		}
+	}()
+
+	IDFTicker := time.NewTicker(time.Hour * 5)
+	go func() {
+		fmt.Println("Starting IDF Ticker")
+		for range IDFTicker.C {
+			sql.UpdateIDFScores()
+		}
+	}()
 
 }

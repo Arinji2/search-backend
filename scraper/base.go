@@ -10,7 +10,7 @@ import (
 )
 
 func StartScrapers() {
-	indexCount := 50
+	indexCount := 30
 	indexLinks, err := sql.GetIndexList(indexCount)
 	if err != nil {
 		log.Fatal(err)
