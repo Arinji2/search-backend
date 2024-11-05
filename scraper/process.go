@@ -4,25 +4,25 @@ import (
 	types "github.com/Arinji2/search-backend/types"
 )
 
-func processLemmatization(words []types.WordCount, lemmatizer map[string][]string) []types.WordCount {
+func processLemmatization(words []types.ScraperWordCount, lemmatizer map[string][]string) []types.ScraperWordCount {
 
-	var processedWord []types.WordCount
+	var processedWord []types.ScraperWordCount
 
 	for _, wc := range words {
 
 		if _, ok := lemmatizer[wc.Word]; ok {
-			processedWord = append(processedWord, types.WordCount{Word: wc.Word, Count: wc.Count})
+			processedWord = append(processedWord, types.ScraperWordCount{Word: wc.Word, Count: wc.Count})
 			continue
 		}
 
 		for base, variants := range lemmatizer {
 			if contains(variants, wc.Word) {
-				processedWord = append(processedWord, types.WordCount{Word: base, Count: wc.Count})
+				processedWord = append(processedWord, types.ScraperWordCount{Word: base, Count: wc.Count})
 				break
 			}
 		}
 
-		processedWord = append(processedWord, types.WordCount{Word: wc.Word, Count: wc.Count})
+		processedWord = append(processedWord, types.ScraperWordCount{Word: wc.Word, Count: wc.Count})
 
 	}
 

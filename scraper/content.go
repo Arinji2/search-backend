@@ -32,14 +32,33 @@ func fetchAndParse(client *http.Client, url string) (*html.Node, error) {
 	return html.Parse(resp.Body)
 }
 
-func extractContent(n *html.Node) []string {
+func extractContent(n *html.Node) ([]string, string, string) {
 	var content []string
+
+	var firstH1 string
+	var firstP string
 
 	var traverse func(*html.Node)
 	traverse = func(n *html.Node) {
 		if n.Type == html.ElementNode {
 			switch n.Data {
-			case "h1", "h2", "h3", "h4", "h5", "h6", "p":
+			case "h1":
+				text := extractText(n)
+				if text != "" {
+					if firstH1 == "" {
+						firstH1 = text
+					}
+					content = append(content, text)
+				}
+			case "p":
+				text := extractText(n)
+				if text != "" {
+					if firstP == "" {
+						firstP = text
+					}
+					content = append(content, text)
+				}
+			case "h2", "h3", "h4", "h5", "h6":
 				text := extractText(n)
 				if text != "" {
 					content = append(content, text)
@@ -52,7 +71,7 @@ func extractContent(n *html.Node) []string {
 	}
 
 	traverse(n)
-	return content
+	return content, firstH1, firstP
 }
 
 func extractText(n *html.Node) string {
@@ -65,8 +84,9 @@ func extractText(n *html.Node) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func processWords(sentences []string, stopWords map[string]struct{}) map[string]int {
+func processWords(sentences []string, stopWords map[string]struct{}) (map[string]int, int) {
 	wordFreq := make(map[string]int)
+	totalWords := 0
 	pluralizer := pluralize.NewClient()
 
 	for _, sentence := range sentences {
@@ -87,17 +107,18 @@ func processWords(sentences []string, stopWords map[string]struct{}) map[string]
 			}
 
 			wordFreq[word]++
+			totalWords++
 		}
 	}
 
-	return wordFreq
+	return wordFreq, totalWords
 }
 
-func getTopWords(wordFreq map[string]int, n int) []types.WordCount {
+func getTopWords(wordFreq map[string]int, n int) []types.ScraperWordCount {
 
-	pairs := make([]types.WordCount, 0, len(wordFreq))
+	pairs := make([]types.ScraperWordCount, 0, len(wordFreq))
 	for word, count := range wordFreq {
-		pairs = append(pairs, types.WordCount{Word: word, Count: count})
+		pairs = append(pairs, types.ScraperWordCount{Word: word, Count: count})
 	}
 
 	sort.Slice(pairs, func(i, j int) bool {

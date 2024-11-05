@@ -1,6 +1,6 @@
 package types
 
-type WordCount struct {
+type ScraperWordCount struct {
 	Word  string
 	Count int
 }
