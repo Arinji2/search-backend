@@ -59,7 +59,9 @@ func AddIndexList(url string) error {
 func GetIndexList(count int) ([]string, error) {
 	db := getDB()
 
-	query := "SELECT url FROM index_list LIMIT ?"
+	query := `SELECT url FROM index_list 
+			  ORDER BY added_on ASC
+			  LIMIT ?`
 
 	rows, err := db.Query(query, count)
 	if err != nil {

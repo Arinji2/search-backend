@@ -10,14 +10,14 @@ import (
 )
 
 func StartScrapers() {
-	indexCount := 5
+	indexCount := 50
 	indexLinks, err := sql.GetIndexList(indexCount)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	var wg sync.WaitGroup
-	workersCount := 2
+	workersCount := 10
 	workerChan := make(chan string, workersCount)
 	errorChan := make(chan error, indexCount*2)
 

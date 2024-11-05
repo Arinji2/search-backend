@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/Arinji2/search-backend/sql"
 	"github.com/joho/godotenv"
 )
 
@@ -23,5 +22,6 @@ func main() {
 	}
 
 	//scraper.StartScrapers()
-	sql.UpdateIDFScores()
+	//sql.UpdateIDFScores()
+
 }
