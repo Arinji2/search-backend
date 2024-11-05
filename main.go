@@ -24,7 +24,12 @@ func main() {
 		fmt.Println("Using Development Environment")
 	}
 
+	fmt.Println("Running initial scans...")
+	scraper.StartScrapers()
+	sql.UpdateIDFScores()
 	startCronjobs()
+
+	select {}
 }
 
 func startCronjobs() {
