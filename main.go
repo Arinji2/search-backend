@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/Arinji2/search-backend/scraper"
+	"github.com/Arinji2/search-backend/sql"
 	"github.com/joho/godotenv"
 )
 
@@ -22,5 +22,6 @@ func main() {
 		fmt.Println("Using Development Environment")
 	}
 
-	scraper.StartScrapers()
+	//scraper.StartScrapers()
+	sql.UpdateIDFScores()
 }

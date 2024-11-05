@@ -2,6 +2,10 @@ package sql
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
+	"math"
+	"sync"
 
 	"github.com/Arinji2/search-backend/types"
 	"github.com/google/uuid"
@@ -87,4 +91,86 @@ func GetKeywordsCount() (int, error) {
 	}
 
 	return count, nil
+}
+
+func GetAllKeywords() ([]types.SQLKeyword, error) {
+	db := getDB()
+	query := "SELECT id, keyword, doc_count, idf FROM keywords"
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keywords []types.SQLKeyword
+	for rows.Next() {
+		var keyword types.SQLKeyword
+		var id []byte
+		err := rows.Scan(&id, &keyword.Keyword, &keyword.DocCount, &keyword.IDF)
+		if err != nil {
+			return nil, err
+		}
+		keyword.ID = string(id)
+		keywords = append(keywords, keyword)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return keywords, nil
+}
+func UpdateIDFScores() error {
+	keywords, err := GetAllKeywords()
+	if err != nil {
+		return err
+	}
+	pagesCount, err := GetPagesCount()
+
+	if err != nil {
+		return err
+	}
+	var wg sync.WaitGroup
+	workersCount := 10
+	keywordsChan := make(chan types.SQLKeyword, 10)
+	errorChan := make(chan error, len(keywords)*2)
+
+	for i := 0; i < workersCount; i++ {
+		go func() {
+			for keyword := range keywordsChan {
+				existingIDF := keyword.IDF
+				keyword.IDF = math.Log(float64(pagesCount) / float64(keyword.DocCount))
+				err := UpdateKeyword(keyword.ID, keyword)
+				if err != nil {
+					errorChan <- err
+				}
+				fmt.Printf("\n Updated IDF For Keyword %s from %f to %f\n", keyword.Keyword, existingIDF, keyword.IDF)
+				wg.Done()
+			}
+		}()
+	}
+
+	for _, keyword := range keywords {
+		wg.Add(1)
+		keywordsChan <- keyword
+	}
+
+	go func() {
+		wg.Wait()
+		close(errorChan)
+	}()
+
+	close(keywordsChan)
+	var keywordsError error
+
+	for err := range errorChan {
+		keywordsError = errors.Join(keywordsError, err)
+	}
+
+	if keywordsError != nil {
+		return keywordsError
+	}
+
+	return nil
 }
